@@ -5,11 +5,8 @@ cars = []
 weights = dict()
 street_names = dict()
 
-
 def def_value():
     return 0
-
-
 street_freq = defaultdict(def_value)
 
 
@@ -18,23 +15,8 @@ class Car:
         self.streets = [hash(x) for x in line.split()[1:]]
 
 
-def getStreetName(hash):
-    return street_names[hash]
-
-
-def getStreetWeight(hash):
-    return weights[hash]
-
-
-def filterCars(cars, weights):
-    for i in range(len(cars-1), -1):
-        car = cars[i]
-        streets = car.streets
-        streets.map()
-
-
-
 def updateFrequency(street_freq, cars):
+    # here we compute how many cars will traverse each street
     for car in cars:
         for street in car.streets:
             if street in street_freq.keys():
@@ -45,38 +27,44 @@ def updateFrequency(street_freq, cars):
 
 def makeSchedules(nodes, duration, graph, street_freq, street_names):
     schedules = []
+    # lets make a schedule for each node
     for i in range(nodes):
-        #print(graph)
-        #print(i)
+
+        # get the streets coming into the node (so the ones with a traffic light)
         node_streets = [x for x in graph[i] if x is not None]
+
+        # sort the streets by the number of cars that will traverse them (decrescing)
         node_streets.sort(key=lambda x: street_freq[x], reverse=True)
+
+        # remove the streets that will never be traversed, those will stay red all the time
         node_streets = [x for x in node_streets if street_freq[x] != 0]
+
+        # if there are no street left just skip this schedule, this node is never traversed
         if len(node_streets) == 0:
             continue
+
+        # lets build the metric for the schedule
+        # create a list of frequencies from the street that will be part of the schedule 
         local_freq = []
         for street in node_streets:
             local_freq.append(street_freq[street])
         
-        # lets force a first reduction of times
-        local_freq = list(map(lambda x: 1 if x // 2 == 0 else x // 2, local_freq))
+        # these frequencies are the time the traffic light for that street will stay green in the schedule
+        # this is an arbitrary metric, here the times are halved if bigger than one
+        # we should try other metrics since this is far from optimal, but it at least works
+        local_freq = list(map(lambda x: x // 2 if x > 1 else 1, local_freq))
 
-        '''
-        # apparently total is never greater than simulation time
-        # so this code is never executed
-        total = sum(local_freq)
-        while total > duration:
-            old_sum = total
-            local_freq = list(map(lambda x: 1 if x // 2 == 0 else x // 2, local_freq))
-            total = sum(local_freq)
-            if total == old_sum:
-                break
-        '''
-
+        # now we build the schedule to in its form for the output file
         schedule = []
+        # first we need the node ID
         schedule.append(str(i))
+        # then we need the number of elements in the schedule
+        schedule.append(str(len(node_streets)))
+        # then for each element we add a line with the name of the street and the time it will stay green
         for i, h in enumerate(node_streets):
             schedule.append(f"{street_names[h]} {local_freq[i]}")
 
+        # then append this schedule to the list of schedules
         schedules.append(schedule)
 
     return schedules
@@ -86,38 +74,33 @@ def compute(lines):
     line = [int(x) for x in lines[0].split()]
     duration, nodes, streets_n, cars_n, extra_points = line
 
-    #print(duration, nodes, streets_n, cars_n, extra_points)
-
     graph = [[None] * nodes for i in range(nodes)]
 
     index = 0
 
+    # parsing the streets and making the graph
     for _ in range(streets_n):
         index += 1
         line_value = lines[index].split()
-        start = int(line_value[0])
-        stop = int(line_value[1])
-        weight = int(line_value[3])
         name_hash = hash(line_value[2])
+        graph[int(line_value[1])][int(line_value[0])] = name_hash
         street_names[name_hash] = line_value[2]
-        weights[name_hash] = weight
-        graph[stop][start] = name_hash
+        weights[name_hash] = int(line_value[3])
 
+    # parsing the cars
     for _ in range(cars_n):
         index += 1
         cars.append(Car(lines[index]))
 
+    # for each street get the number of cars that will traverse it
     updateFrequency(street_freq, cars)
-    #print(graph)
-    schedules = makeSchedules(nodes, duration, graph, street_freq,
-                              street_names)
+
+    # for each node lets make a schedule and create a list of schedules to output
+    schedules = makeSchedules(nodes, duration, graph, street_freq, street_names)
 
     output_list = [str(len(schedules))]
-    for index, sched in enumerate(schedules):
-        output_list.append(sched[0])
-        output_list.append(str(len(sched)-1))
-        for line in sched[1:]:
-            output_list.append(line)
+    for sched in schedules:
+        output_list.extend(sched)
 
     return output_list
 
@@ -130,19 +113,3 @@ def compute(lines):
 # find the lights that are always green (have one street passing through)
 # find the lights that have multiple streets passing through
 # at least for example A, if cars are at an intersection, prioritize the one with the longest time left in its path
-'''
-
-number of nodes to apply the schedule
-
-node id
-number of streets
-name of street, time
-name of street, time
-
-node id
-number of streets
-name of street, time
-name of street, time
-
-
-'''
