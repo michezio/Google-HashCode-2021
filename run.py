@@ -37,6 +37,8 @@ def main():
     # Output folder should exist before launching the script
     assert os.path.exists(f"{cwd}output"), "No output folder found"
     out_path = in_path.replace("input", "output")[:-len(IN_EXT)]
+    if len(args) == 2:
+        out_path = out_path + "-" + args[1]
     out_path = out_path + "-" + date.datetime.now().strftime("%y%m%d-%H%M%S") + OUT_EXT
 
     print("RUNNING...")
