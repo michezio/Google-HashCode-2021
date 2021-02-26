@@ -13,22 +13,6 @@ def def_value():
 street_freq = defaultdict(def_value)
 
 
-class Street:
-    def __init__(self, line):
-        parsed = line.split()
-        self.start = int(parsed[0])
-        self.stop = int(parsed[1])
-        self.id = hash(parsed[2])
-        self.duration = int(parsed[3])
-
-
-class Node:
-    def __init__(self, id):
-        self.id = id
-        self.in_streets = []
-        self.out_streets = []
-
-
 class Car:
     def __init__(self, line):
         self.streets = [hash(x) for x in line.split()[1:]]
@@ -42,8 +26,12 @@ def getStreetWeight(hash):
     return weights[hash]
 
 
-def hash(x):
-    return x
+def filterCars(cars, weights):
+    for i in range(len(cars-1), -1):
+        car = cars[i]
+        streets = car.streets
+        streets.map()
+
 
 
 def updateFrequency(street_freq, cars):
@@ -68,14 +56,21 @@ def makeSchedules(nodes, duration, graph, street_freq, street_names):
         local_freq = []
         for street in node_streets:
             local_freq.append(street_freq[street])
+        
+        # lets force a first reduction of times
+        local_freq = list(map(lambda x: 1 if x // 2 == 0 else x // 2, local_freq))
 
+        '''
+        # apparently total is never greater than simulation time
+        # so this code is never executed
         total = sum(local_freq)
         while total > duration:
             old_sum = total
-            local_freq.map(lambda x: 1 if x // 2 == 0 else x // 2)
+            local_freq = list(map(lambda x: 1 if x // 2 == 0 else x // 2, local_freq))
             total = sum(local_freq)
             if total == old_sum:
                 break
+        '''
 
         schedule = []
         schedule.append(str(i))
