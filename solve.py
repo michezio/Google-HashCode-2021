@@ -2,11 +2,12 @@ from collections import defaultdict
 
 graph_matrix = []
 cars = []
+street_nodes = dict()
 street_weights = dict()
 
-def defaultValue():
-    return 0
-street_frequencies = defaultdict(defaultValue)
+street_frequencies = defaultdict(lambda: 0)
+street_first_visit = defaultdict(lambda: 10e5)
+street_longest_time = defaultdict(lambda: 0)
 
 '''
 Modelling the car as an entity.
@@ -20,7 +21,7 @@ class Car:
         self.streets = line.split()[1:]
 
 
-def makeSchedules(nodes, graph, street_freq):
+def makeSchedules(nodes, graph, street_freq, street_first):
     schedules = []
     # lets make a schedule for each node
     for i in range(nodes):
@@ -28,39 +29,37 @@ def makeSchedules(nodes, graph, street_freq):
         # get the streets coming into the node (so the ones with a traffic light)
         node_streets = [x for x in graph[i] if x is not None]
 
-        # sort the streets by the number of cars that will traverse them (decrescing)
-        node_streets.sort(key=lambda x: street_freq[x], reverse=True)
+        # create a proto schedule as a list of tuples containing name and green time
+        proto_sched = []
+        for street in node_streets:
+            if street_freq[street] != 0:
+                # in this case we use as an initial metric the frequency of the street
+                # street traversed more will get more green time.
+                metric = street_freq[street]
+                # Another arbitrary decision, divide the frequency by ~20
+                # different values give best scores for different inputs
+                metric = max(1, metric // 20)
+                proto_sched.append((street, metric))
 
-        # remove the streets that will never be traversed, those will stay red all the time
-        node_streets = [x for x in node_streets if street_freq[x] != 0]
-
-        # if there are no street left just skip this schedule, this node is never traversed
-        if len(node_streets) == 0:
+        # if the proto schedule is empty continue with the next node
+        if len(proto_sched) == 0:
             continue
 
-        # lets build the metric for the schedule
-        # create a list of frequencies from the street that will be part of the schedule 
-        local_freq = []
-        for street in node_streets:
-            local_freq.append(street_freq[street])
-        
-        '''
-        These frequencies are the time the traffic light for that street will
-        stay green in the schedule. This is an arbitrary metric, here the times
-        are halved if bigger than one but we should try other metrics since this
-        is far from optimal, but it's at least something ¯\_(ツ)_/¯
-        '''
-        local_freq = list(map(lambda x: x // 2 if x > 1 else 1, local_freq))
+        # lets now sort the proto schedule putting first the streets traversed first
+        # we multiply the time of traversal by 10e5 and subtract the frequency
+        # in this way we give high priority to the first time of traversal and lower
+        # priority to the frequency (which we subtract so is in decrescing order)
+        proto_sched.sort(key=lambda x: street_first[x[0]])
 
         # now we build the schedule to in its form for the output file
         schedule = []
         # first we need the node ID
         schedule.append(str(i))
         # then we need the number of elements in the schedule
-        schedule.append(str(len(node_streets)))
+        schedule.append(str(len(proto_sched)))
         # then for each element we add a line with the name of the street and the time it will stay green
-        for i, h in enumerate(node_streets):
-            schedule.append(f"{h} {local_freq[i]}")
+        for name, green_time in proto_sched:
+            schedule.append(f"{name} {green_time}")
 
         # then append this schedule to the list of schedules
         schedules.append(schedule)
@@ -84,6 +83,11 @@ def compute(lines):
     all the streets coming into the node 5 and all the traffic lights of the node.
     '''
 
+    # make a list to count how many traffic light each node has
+    streets_per_node = []
+    for node_row in graph_matrix:
+        streets_per_node.append(sum([1 for street in node_row if street is not None]))
+
     # this index will keep track of the line in the file (first line already parsed)
     line_index = 1 
 
@@ -93,6 +97,7 @@ def compute(lines):
         origin_node = int(line_value[0])
         destination_node = int(line_value[1])
         street_name = line_value[2]
+        street_nodes[street_name] = (origin_node, destination_node)
         graph_matrix[destination_node][origin_node] = street_name
         street_weights[street_name] = int(line_value[3])
         line_index += 1
@@ -102,13 +107,27 @@ def compute(lines):
         cars.append(Car(lines[line_index]))
         line_index += 1
 
+    # estimate a wait of half the schedule in each node
+    estimated_wait = 0.5
+
     # for each street get the number of cars that will traverse it
     for car in cars:
-        for street in car.streets:
-            street_frequencies[street] += 1
+        cumul_time = 0
+        for i in range(len(car.streets)):
+            street = car.streets[i]
+            if i < len(car.streets) - 1:
+                # don't count the destination street
+                street_frequencies[street] += 1
+                if i == 0:
+                    street_first_visit[street] = 0
+                else:
+                    cumul_time += street_weights[street] + \
+                        streets_per_node[street_nodes[street][0]] * estimated_wait
+                    street_first_visit[street] = min(street_first_visit[street], cumul_time)
+                    street_longest_time[street] = max(street_longest_time[street], cumul_time)
 
     # for each node lets make a schedule and create a list of schedules to output
-    schedules = makeSchedules(nodes_n, graph_matrix, street_frequencies)
+    schedules = makeSchedules(nodes_n, graph_matrix, street_frequencies, street_first_visit)
 
     output_list = [str(len(schedules))]
     for sched in schedules:
