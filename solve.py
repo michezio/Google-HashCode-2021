@@ -36,8 +36,9 @@ def makeSchedules(nodes, graph, street_freq, street_first):
                 # in this case we use as an initial metric the frequency of the street
                 # street traversed more will get more green time.
                 metric = street_freq[street]
-                # Another arbitrary decision, divide the frequency in half if >1.
-                metric = metric // 2 if metric > 1 else 1
+                # Another arbitrary decision, divide the frequency by ~20
+                # different values give best scores for different inputs
+                metric = max(1, metric // 20)
                 proto_sched.append((street, metric))
 
         # if the proto schedule is empty continue with the next node
